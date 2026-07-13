@@ -179,46 +179,53 @@ def status_df(df: pd.DataFrame):
 
 
 # ----------------------------------------------------------------------------
-# Sidebar — inputs
+# Inputs — main page
 # ----------------------------------------------------------------------------
 shapes = load_shapes()
 
-st.sidebar.title("Input")
+st.title("Steel Beam — Unreinforced Web Opening")
+st.caption("AISC Design Guide 2, Ch. 4 · LRFD · φ = 0.90 · Units: kips, in, ksi")
 
-st.sidebar.subheader("1 · Member")
-shape = st.sidebar.selectbox("W-shape (AISC v15.0)", shapes["Shape"],
-                             index=int(shapes.index[shapes.Shape == "W24X55"][0]))
-row = shapes.loc[shapes.Shape == shape].iloc[0]
+col_a, col_b, col_c = st.columns(3, gap="large")
 
-with st.sidebar.expander("Section properties (editable)", expanded=False):
-    A  = st.number_input("A — area (in²)",             value=float(row.A),  format="%.3f")
-    d  = st.number_input("d — depth (in)",             value=float(row.d),  format="%.3f")
-    tw = st.number_input("tw — web thickness (in)",    value=float(row.tw), format="%.3f")
-    bf = st.number_input("bf — flange width (in)",     value=float(row.bf), format="%.3f")
-    tf = st.number_input("tf — flange thickness (in)", value=float(row.tf), format="%.3f")
-    Zx = st.number_input("Zx — plastic modulus (in³)", value=float(row.Zx), format="%.1f")
+with col_a:
+    st.subheader("1 · Member")
+    shape = st.selectbox("W-shape (AISC v15.0)", shapes["Shape"],
+                         index=int(shapes.index[shapes.Shape == "W24X55"][0]))
+    row = shapes.loc[shapes.Shape == shape].iloc[0]
+    with st.expander("Section properties (editable)", expanded=False):
+        A  = st.number_input("A — area (in²)",             value=float(row.A),  format="%.3f")
+        d  = st.number_input("d — depth (in)",             value=float(row.d),  format="%.3f")
+        tw = st.number_input("tw — web thickness (in)",    value=float(row.tw), format="%.3f")
+        bf = st.number_input("bf — flange width (in)",     value=float(row.bf), format="%.3f")
+        tf = st.number_input("tf — flange thickness (in)", value=float(row.tf), format="%.3f")
+        Zx = st.number_input("Zx — plastic modulus (in³)", value=float(row.Zx), format="%.1f")
+    Fy = st.number_input("Fy — yield stress (ksi)", value=36.0, min_value=1.0)
 
-st.sidebar.subheader("2 · Design input")
-Fy = st.sidebar.number_input("Fy — yield stress (ksi)", value=36.0, min_value=1.0)
-Mu = st.sidebar.number_input("Mu — factored moment at opening ℄ (k-ft)", value=290.6)
-Vu = st.sidebar.number_input("Vu — factored shear at opening ℄ (kips)", value=21.5)
+with col_b:
+    st.subheader("2 · Loads")
+    Mu = st.number_input("Mu — factored moment at opening ℄ (k-ft)", value=290.6)
+    Vu = st.number_input("Vu — factored shear at opening ℄ (kips)", value=21.5)
+    tee = st.radio("Tee in compression (§3.7a3)",
+                   ["Deeper tee", "Shallower tee"], horizontal=True)
 
-opening = st.sidebar.radio("Opening shape", ["Rectangular", "Circular"], horizontal=True)
-circular = opening == "Circular"
-if circular:
-    h0 = st.sidebar.number_input("D0 — opening diameter (in)", value=10.0, min_value=0.01)
-    a0 = 0.45 * h0
-    st.sidebar.caption("§3.7b4: h0 = D0 (bending), 0.9·D0 (shear), a0 = 0.45·D0")
-else:
-    h0 = st.sidebar.number_input("h0 — opening depth (in)", value=10.0, min_value=0.01)
-    a0 = st.sidebar.number_input("a0 — opening length (in)", value=20.0, min_value=0.01)
+with col_c:
+    st.subheader("3 · Opening")
+    opening = st.radio("Opening shape", ["Rectangular", "Circular"], horizontal=True)
+    circular = opening == "Circular"
+    if circular:
+        h0 = st.number_input("D0 — opening diameter (in)", value=10.0, min_value=0.01)
+        a0 = 0.45 * h0
+        st.caption("§3.7b4: h0 = D0 (bending), 0.9·D0 (shear), a0 = 0.45·D0")
+    else:
+        h0 = st.number_input("h0 — opening depth (in)", value=10.0, min_value=0.01)
+        a0 = st.number_input("a0 — opening length (in)", value=20.0, min_value=0.01)
+    e = abs(st.number_input("e — eccentricity from mid-depth (in)", value=2.0))
+    S_txt = st.text_input("S — clear spacing to adjacent opening (in)",
+                          value="", placeholder="blank if single opening")
+    S = float(S_txt) if S_txt.strip() else None
 
-e = abs(st.sidebar.number_input("e — eccentricity from mid-depth (in)", value=2.0))
-tee = st.sidebar.radio("Tee in compression (§3.7a3)",
-                       ["Deeper tee", "Shallower tee"], horizontal=True)
-S_txt = st.sidebar.text_input("S — clear spacing to adjacent opening (in)",
-                              value="", placeholder="blank if single opening")
-S = float(S_txt) if S_txt.strip() else None
+st.divider()
 
 # ----------------------------------------------------------------------------
 # Run
@@ -226,10 +233,7 @@ S = float(S_txt) if S_txt.strip() else None
 r = calc(Fy, Mu, Vu, circular, h0, a0, e, tee == "Deeper tee",
          d, tw, bf, tf, Zx, S)
 
-st.title("Steel Beam — Unreinforced Web Opening")
-st.caption("AISC Design Guide 2, Ch. 4 · LRFD · φ = 0.90 · Units: kips, in, ksi · "
-           f"Member: **{shape}**, Fy = {Fy:g} ksi")
-
+st.markdown(f"#### Result — {shape}, Fy = {Fy:g} ksi")
 banner = {
     "OK":   (st.success, "**OK — opening acceptable.** No reinforcement required."),
     "COND": (st.warning, "**Conditional.** Verify compression-tee buckling per §3.7a3 (ν > 4)."),
