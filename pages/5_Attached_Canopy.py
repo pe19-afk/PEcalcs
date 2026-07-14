@@ -1,3 +1,4 @@
+import math
 import streamlit as st
 
 st.set_page_config(page_title="Attached Canopy", page_icon="📐")
@@ -31,6 +32,16 @@ def interp_kz(z: float, exposure: str) -> float:
     return ks[-1]
 
 
+def gcp_canopy(A, gcp10, gcpU, A_U=100.0):
+    """Log-linear GCp interpolation vs effective wind area (ft^2)."""
+    if A <= 10.0:
+        return gcp10
+    if A >= A_U:
+        return gcpU
+    frac = (math.log10(A) - 1.0) / (math.log10(A_U) - 1.0)
+    return gcp10 + (gcpU - gcp10) * frac
+
+
 # ---------------------------- Inputs ----------------------------
 st.subheader("Wind parameters")
 col1, col2 = st.columns(2)
@@ -49,15 +60,31 @@ if z > 60:
 
 Kz = interp_kz(z, exposure)
 
-st.subheader("Pressure coefficients (from Fig 30.9.1A)")
-st.caption("Read GCp from Fig 30.9.1A for your effective wind area and clearance ratio, "
-           "then enter the values here.")
-col3, col4 = st.columns(2)
-ewa = col3.number_input("Effective wind area (ft²)", value=20.0, min_value=0.0, step=1.0,
-                        help="For reference/record — use it to read GCp off the figure.")
-gcp_upper = col4.number_input("GCp — upper surface (−)", value=-1.10, step=0.05)
-gcp_lower = col3.number_input("GCp — lower surface (−)", value=-0.75, step=0.05)
-gcp_pos = col4.number_input("GCp — positive (+)", value=0.75, step=0.05)
+# ------------------- GCp from effective wind area -------------------
+st.subheader("GCp — interpolated from effective wind area")
+A_eff = st.number_input("Effective wind area (ft²)", value=20.0, min_value=0.0, step=1.0,
+                        help="GCp is constant for A ≤ 10 ft², log-interpolated between "
+                             "10 and 100 ft², and constant for A ≥ 100 ft².")
+
+with st.expander("Curve endpoints from Fig 30.9.1A (set once per figure)", expanded=False):
+    st.caption("Enter GCp at A ≤ 10 ft² and at A ≥ 100 ft² for each surface, read from "
+               "Fig 30.9.1A for your clearance ratio.")
+    e1, e2 = st.columns(2)
+    u10 = e1.number_input("Upper (−): GCp @ ≤10 ft²", value=-1.10, step=0.05)
+    uU = e2.number_input("Upper (−): GCp @ ≥100 ft²", value=-0.75, step=0.05)
+    l10 = e1.number_input("Lower (−): GCp @ ≤10 ft²", value=-0.75, step=0.05)
+    lU = e2.number_input("Lower (−): GCp @ ≥100 ft²", value=-0.75, step=0.05)
+    p10 = e1.number_input("Positive (+): GCp @ ≤10 ft²", value=0.75, step=0.05)
+    pU = e2.number_input("Positive (+): GCp @ ≥100 ft²", value=0.75, step=0.05)
+
+gcp_upper = gcp_canopy(A_eff, u10, uU)
+gcp_lower = gcp_canopy(A_eff, l10, lU)
+gcp_pos = gcp_canopy(A_eff, p10, pU)
+
+gc1, gc2, gc3 = st.columns(3)
+gc1.metric("GCp upper (−)", f"{gcp_upper:.3f}")
+gc2.metric("GCp lower (−)", f"{gcp_lower:.3f}")
+gc3.metric("GCp positive (+)", f"{gcp_pos:.3f}")
 
 # --------------------------- Calculation ---------------------------
 # ASCE 7-22 Eq 26.10-1: qh = 0.00256 * Kz * Kzt * Kd * Ke * V^2   (psf, V in mph)
@@ -80,5 +107,6 @@ rc2.metric("p — lower (−)", f"{p_lower:,.2f} psf")
 rc3.metric("p — positive (+)", f"{p_pos:,.2f} psf")
 
 st.info("Kd is applied once, inside qh, per ASCE 7-22 Eq 26.10-1. "
-        "Confirm GCp zone, clearance ratio, and load cases from Fig 30.9.1A, and apply "
-        "governing load combinations. LRFD pressures shown; multiply by 0.6 for ASD.")
+        "Confirm GCp curve endpoints, zone, clearance ratio, and load cases from "
+        "Fig 30.9.1A, and apply governing load combinations. LRFD pressures shown; "
+        "multiply by 0.6 for ASD.")
